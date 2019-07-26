@@ -5,6 +5,7 @@ use std::fmt;
 pub enum Error {
     Parse(String),
     IncompleteInput,
+    InvalidBlockBtype11,
 }
 
 impl fmt::Display for Error {

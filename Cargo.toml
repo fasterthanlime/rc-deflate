@@ -9,3 +9,6 @@ edition = "2018"
 [dependencies]
 nom = "5.0.0"
 bitvec = "0.14.0"
+hex_fmt = "0.3.0"
+left-pad = "1.0.1"
+tabular = "0.1.2"

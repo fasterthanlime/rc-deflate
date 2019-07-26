@@ -1,5 +1,4 @@
 use crate::{error::Error, parse};
-// use bitvec::prelude::*;
 use nom::{
     bytes::streaming::{tag, take_till},
     combinator::{cond, map},
@@ -20,10 +19,8 @@ impl Reader {
         };
         println!("header = {:#?}", header);
 
-        // let slice: &BitSlice = (&buf[..]).as_bitslice::<BigEndian>();
-        // println!("first few bits = {:?}", &slice[..8]);
-
-        unimplemented!()
+        let res = crate::deflate::Reader::read(buf)?;
+        Ok(res)
     }
 }
 
@@ -32,8 +29,8 @@ pub struct Header {
     method: Method,
     flags: Flags,
     mtime: u32,
-    xfl: u8,
-    os: u8,
+    extra_flags: ExtraFlags,
+    os: OS,
     extra: Option<Vec<u8>>,
     name: Option<Vec<u8>>,
     comment: Option<Vec<u8>>,
@@ -46,9 +43,15 @@ impl Header {
     pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
         let mf = preceded(
             tag(Self::SIGNATURE),
-            tuple((Method::parse, Flags::parse, le_u32, le_u8, le_u8)),
+            tuple((
+                Method::parse,
+                Flags::parse,
+                le_u32,
+                ExtraFlags::parse,
+                OS::parse,
+            )),
         );
-        let (i, (method, flags, mtime, xfl, os)) = mf(i)?;
+        let (i, (method, flags, mtime, extra_flags, os)) = mf(i)?;
 
         let null_terminated = || terminated(take_till(|b| b == 0), tag(&[0u8]));
 
@@ -63,7 +66,7 @@ impl Header {
                 method,
                 flags,
                 mtime,
-                xfl,
+                extra_flags,
                 os,
                 extra: extra.map(|x| x.to_owned()),
                 name: name.map(|x| x.to_owned()),
@@ -74,6 +77,24 @@ impl Header {
     }
 }
 
+#[derive(Debug)]
+pub struct Trailer {
+    crc32: u32,
+    input_size: u32,
+}
+
+impl Trailer {
+    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+        map(tuple((le_u32, le_u32)), |(crc32, input_size)| Self {
+            crc32,
+            input_size,
+        })(i)
+    }
+}
+
+/// Identifies the compression method used in the file.
+/// 0-7 are reserved, 8 denotes "Deflate", customarily
+/// used by gzip.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Method {
     Deflate,
@@ -95,22 +116,69 @@ impl From<u8> for Method {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+pub enum OS {
+    Fat,
+    Amiga,
+    Vms,
+    Unix,
+    VmCms,
+    AtariTos,
+    Hpfs,
+    Macintosh,
+    ZSystem,
+    CpM,
+    Tops20,
+    Ntfs,
+    Qdos,
+    AcornRiscOs,
+    Unknown,
+    Other(u8),
+}
+
+impl OS {
+    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+        map(le_u8, |u| u.into())(i)
+    }
+}
+
+impl From<u8> for OS {
+    fn from(u: u8) -> Self {
+        match u {
+            0 => OS::Fat,
+            1 => OS::Amiga,
+            2 => OS::Vms,
+            3 => OS::Unix,
+            4 => OS::VmCms,
+            5 => OS::AtariTos,
+            6 => OS::Hpfs,
+            7 => OS::Macintosh,
+            8 => OS::ZSystem,
+            9 => OS::CpM,
+            10 => OS::Tops20,
+            11 => OS::Ntfs,
+            12 => OS::Qdos,
+            13 => OS::AcornRiscOs,
+            255 => OS::Unknown,
+            n => OS::Other(n),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Flags(u8);
 
 impl Flags {
     pub const FTEXT: Flags = Flags(0b1);
-    pub const FHCRC: Flags = Flags(0b01);
-    pub const FEXTRA: Flags = Flags(0b001);
-    pub const FNAME: Flags = Flags(0b0001);
-    pub const FCOMMENT: Flags = Flags(0b00001);
+    pub const FHCRC: Flags = Flags(0b10);
+    pub const FEXTRA: Flags = Flags(0b100);
+    pub const FNAME: Flags = Flags(0b1000);
+    pub const FCOMMENT: Flags = Flags(0b10000);
 
     fn has(self, flag: Flags) -> bool {
         self & flag != Flags(0)
     }
-}
 
-impl Flags {
     pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
         map(le_u8, |u| u.into())(i)
     }
@@ -156,6 +224,60 @@ impl fmt::Debug for Flags {
 }
 
 impl std::ops::BitAnd for Flags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self {
+        Self(self.0 & rhs.0)
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub struct ExtraFlags(u8);
+
+impl ExtraFlags {
+    pub const SLOWEST: ExtraFlags = ExtraFlags(0b10);
+    pub const FASTEST: ExtraFlags = ExtraFlags(0b100);
+
+    fn has(self, flag: ExtraFlags) -> bool {
+        self & flag != ExtraFlags(0)
+    }
+
+    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+        map(le_u8, |u| u.into())(i)
+    }
+}
+
+impl From<u8> for ExtraFlags {
+    fn from(u: u8) -> Self {
+        Self(u)
+    }
+}
+
+impl fmt::Debug for ExtraFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ExtraFlags(")?;
+        let mut first = true;
+        let mut item = |s: &str| {
+            if first {
+                first = false;
+                write!(f, "{}", s)
+            } else {
+                write!(f, ", {}", s)
+            }
+        };
+
+        if self.has(ExtraFlags::SLOWEST) {
+            item("SLOWEST")?;
+        }
+        if self.has(ExtraFlags::FASTEST) {
+            item("FASTEST")?;
+        }
+        write!(f, ")")?;
+        Ok(())
+    }
+}
+
+impl std::ops::BitAnd for ExtraFlags {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self {
