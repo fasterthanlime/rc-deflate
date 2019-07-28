@@ -67,8 +67,8 @@ impl Reader {
                     buf = reader.align();
                     println!("{:b}", buf[0]);
                     println!("{:x?}", &buf[1..5]);
-                    let a = buf[1] as u16 + (buf[2] as u16) << 8;
-                    let b = buf[3] as u16 + (buf[4] as u16) << 8;
+                    let a = (u16::from(buf[1]) + u16::from(buf[2])) << 8;
+                    let b = (u16::from(buf[3]) +u16::from(buf[4])) << 8;
                     println!("a = {}, b = {}, !b = {}", a, b, !b);
 
                     buf = &buf[4..];
