@@ -40,7 +40,7 @@ pub struct Header {
 impl Header {
     const SIGNATURE: [u8; 2] = [0x1f, 0x8b];
 
-    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+    pub fn parse(i: &[u8]) -> parse::Result<Self> {
         let mf = preceded(
             tag(Self::SIGNATURE),
             tuple((
@@ -84,7 +84,7 @@ pub struct Trailer {
 }
 
 impl Trailer {
-    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+    pub fn parse(i: &[u8]) -> parse::Result<Self> {
         map(tuple((le_u32, le_u32)), |(crc32, input_size)| Self {
             crc32,
             input_size,
@@ -102,7 +102,7 @@ pub enum Method {
 }
 
 impl Method {
-    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+    pub fn parse(i: &[u8]) -> parse::Result<Self> {
         map(le_u8, |u| u.into())(i)
     }
 }
@@ -137,7 +137,7 @@ pub enum OS {
 }
 
 impl OS {
-    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+    pub fn parse(i: &[u8]) -> parse::Result<Self> {
         map(le_u8, |u| u.into())(i)
     }
 }
@@ -179,7 +179,7 @@ impl Flags {
         self & flag != Flags(0)
     }
 
-    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+    pub fn parse(i: &[u8]) -> parse::Result<Self> {
         map(le_u8, |u| u.into())(i)
     }
 }
@@ -242,7 +242,7 @@ impl ExtraFlags {
         self & flag != ExtraFlags(0)
     }
 
-    pub fn parse<'a>(i: &'a [u8]) -> parse::Result<'a, Self> {
+    pub fn parse(i: &[u8]) -> parse::Result<Self> {
         map(le_u8, |u| u.into())(i)
     }
 }
