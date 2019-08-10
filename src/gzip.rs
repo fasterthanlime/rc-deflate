@@ -192,35 +192,31 @@ impl From<u8> for Flags {
 
 impl fmt::Debug for Flags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Flags(")?;
-        let mut first = true;
-        let mut item = |s: &str| {
-            if first {
-                first = false;
-                write!(f, "{}", s)
-            } else {
-                write!(f, ", {}", s)
-            }
-        };
+        let mut t = f.debug_tuple("Flags");
 
         if self.has(Flags::FTEXT) {
-            item("TEXT")?;
+            t.field(&format_args!("TEXT"));
         }
         if self.has(Flags::FHCRC) {
-            item("HCRC")?;
+            t.field(&format_args!("HCRC"));
         }
         if self.has(Flags::FEXTRA) {
-            item("EXTRA")?;
+            t.field(&format_args!("EXTRA"));
         }
         if self.has(Flags::FNAME) {
-            item("NAME")?;
+            t.field(&format_args!("NAME"));
         }
         if self.has(Flags::FCOMMENT) {
-            item("COMMENT")?;
+            t.field(&format_args!("COMMENT"));
         }
-        write!(f, ")")?;
-        Ok(())
+
+        t.finish()
     }
+}
+
+#[test]
+fn custom_flags_debug() {
+    assert_eq!("Flags(TEXT, HCRC, EXTRA, NAME, COMMENT)", format!("{:?}", Flags::from(0b11111)))
 }
 
 impl std::ops::BitAnd for Flags {
